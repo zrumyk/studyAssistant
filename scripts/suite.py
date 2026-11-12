@@ -251,6 +251,7 @@ def cmd_check(args):
     import httpx
     record = json.loads(Path(args.results).read_text('utf-8'))
     with httpx.Client(base_url=API, trust_env=False, timeout=60) as client:
+        client.headers['x-study-token'] = client.get('/api/session').json()['token']
         settings = client.get('/api/settings').json()
     for res in record['results']:
         if res.get('project_id'):
