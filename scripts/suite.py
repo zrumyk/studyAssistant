@@ -132,28 +132,49 @@ def stop_reason(p):
     return p['status']
 
 
-def run_task(client, task_dir, settings, run_id, budget_left, timeout_min):
-    import httpx  # noqa: F401  (client is an httpx.Client)
+def get_json(client, url):
+    """GET with retries: a dropped local connection must not abort a paid run."""
+    for attempt in range(6):
+        try:
+            r = client.get(url)
+            r.raise_for_status()
+            return r.json()
+        except Exception:
+            if attempt == 5:
+                raise
+            time.sleep(5 * (attempt + 1))
+
+
+def run_task(client, task_dir, settings, run_id, budget_left, timeout_min, attach=None):
     meta = json.loads((task_dir / 'task.json').read_text('utf-8'))
     task_text = (task_dir / meta['task_file']).read_text('utf-8-sig').strip()
     result = {'task': task_dir.name, 'raw_input': meta.get('raw', False), 'stage': 'created', 'executed': False,
               'started': datetime.datetime.now().isoformat(timespec='seconds')}
-    r = client.post('/api/projects', json={'title': f"{meta['title']} [{run_id}]", 'subject': meta['subject'],
-                                           'variant': meta.get('variant', ''), 'task': task_text})
-    r.raise_for_status()
-    pid = r.json()['id']
-    result['project_id'] = pid
     imports = []
-    for doc in meta.get('documents', []):
-        r = client.post('/api/import', json={'path': str((task_dir / doc['file']).resolve()), 'role': doc['role'],
-                                              'subject': meta['subject'], 'project_id': pid})
-        r.raise_for_status()
-        imports.append(r.json()['job_id'])
-    deadline = time.time() + timeout_min * 60
     analysed = approved = False
+    if attach:
+        pid = attach
+        p = get_json(client, f'/api/projects/{pid}')
+        analysed = True
+        approved = bool(p['approved_hash'])
+        result['attached'] = True
+        if approved:
+            result['stage'] = 'approved'
+    else:
+        r = client.post('/api/projects', json={'title': f"{meta['title']} [{run_id}]", 'subject': meta['subject'],
+                                               'variant': meta.get('variant', ''), 'task': task_text})
+        r.raise_for_status()
+        pid = r.json()['id']
+        for doc in meta.get('documents', []):
+            r = client.post('/api/import', json={'path': str((task_dir / doc['file']).resolve()), 'role': doc['role'],
+                                                  'subject': meta['subject'], 'project_id': pid})
+            r.raise_for_status()
+            imports.append(r.json()['job_id'])
+    result['project_id'] = pid
+    deadline = time.time() + timeout_min * 60
     while True:
         time.sleep(5)
-        p = client.get(f'/api/projects/{pid}').json()
+        p = get_json(client, f'/api/projects/{pid}')
         cost, calls = spend(pid)
         result.update(cost_usd=round(cost, 6), model_calls=calls, status=p['status'])
         jobs = {j['id']: j for j in p['jobs']}
@@ -225,7 +246,9 @@ def cmd_run(args):
     folder = OUT / run_id
     folder.mkdir(parents=True, exist_ok=True)
     record = {'run_id': run_id, 'commit': commit, 'dirty': dirty, 'budget_usd': args.budget, 'results': []}
-    with httpx.Client(base_url=API, trust_env=False, timeout=60) as client:
+    attach = dict(item.split('=', 1) for item in (args.attach or []))
+    limits = httpx.Limits(max_keepalive_connections=0)
+    with httpx.Client(base_url=API, trust_env=False, timeout=60, limits=limits) as client:
         client.headers['x-study-token'] = client.get('/api/session').json()['token']
         settings = client.get('/api/settings').json()
         record['model'] = {k: settings.get(k) for k in ('cloud_provider', 'cloud_model', 'cloud_thinking', 'model', 'coding_model')}
@@ -235,7 +258,7 @@ def cmd_run(args):
                 record['results'].append({'task': task_dir.name, 'stage': 'created', 'reason': 'skipped: suite budget exhausted'})
                 continue
             print('start', task_dir.name, flush=True)
-            res = run_task(client, task_dir, settings, run_id, args.budget - spent, args.timeout)
+            res = run_task(client, task_dir, settings, run_id, args.budget - spent, args.timeout, attach.get(task_dir.name))
             spent += res.get('cost_usd', 0)
             record['results'].append(res)
             record['summary'] = summary(record['results'])
@@ -286,6 +309,7 @@ def main():
     run.add_argument('--only', nargs='*')
     run.add_argument('--budget', type=float, default=0.50, help='suite spend limit in USD')
     run.add_argument('--timeout', type=int, default=90, help='minutes per task')
+    run.add_argument('--attach', nargs='*', help='task=project_id: continue watching an already created project')
     check = sub.add_parser('check')
     check.add_argument('results')
     selftest = sub.add_parser('selftest')
