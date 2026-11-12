@@ -1,0 +1,11 @@
+# SA-112 — Evidence supplied to runtime repair
+
+The diagnosis advisor receives the same observed input-inspection text as the generator, the approved step criterion, current source and actual runtime failure. Its instruction explicitly treats both producer and checker as possible fault locations. Immutable input contracts take precedence over a generated assertion. A checker correction must preserve the required check; missing facts remain unknown. Advice remains an untrusted hypothesis and does not mark execution successful.
+
+Large JSON inspections previously sampled every array to two entries. That can omit schema definitions following index entries in an inventory. The inspector now retains up to16 observed CREATE TABLE SQL records, with path and per-record truncation marker, before the sampled shape. This is bounded text inspection of existing project JSON; it does not execute SQL, open arbitrary host databases or invent a schema. Overall input-context limits still apply and oversized fragments are labelled.
+
+The controller does not choose a laboratory-specific expectation or write a solution/checker correction. Model-authored patches remain subject to normal owned-file/static/preflight/runtime checks. Prompt guidance cannot prove that every future checker edit preserves semantics; independent review is still required.
+
+Offline evidence: G02 saved diagnosis requests652f13620b434611af669d98aa75806e and71aeebced035407f9e9b02761e11c8d5 included the current checker, but omitted inspected input text. The first response proposed alternative schema/checker changes without resolving input authority; the generated producer patch left the failing assertion. The second response is incomplete/malformed and is retained without replay. The inventory’s sampled sqlite_master began with indices, hiding table DDL. This identifies delivery defects, not a guarantee of a future model verdict.
+
+Tests use unrelated SQL/array/JSON facts to check advisor delivery and preserve the approved criterion; a schema beyond initial sample rows remains visible. Model-stub checker type corrections retain rejection of wrong values and do not modify producer/workspace files. These tests do not claim actual model reasoning quality.
