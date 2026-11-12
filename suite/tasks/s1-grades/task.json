@@ -1,0 +1,9 @@
+{
+ "title": "Набір S1 — статистика оцінок груп",
+ "subject": "Набір перевірки — аналіз даних",
+ "variant": "",
+ "raw": false,
+ "task_file": "task.md",
+ "documents": [{"file": "files/grades.csv", "role": "data"}],
+ "outputs": ["group_stats.csv"]
+}

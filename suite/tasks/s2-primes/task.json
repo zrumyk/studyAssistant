@@ -1,0 +1,9 @@
+{
+ "title": "Набір S2 — решето Ератосфена",
+ "subject": "Набір перевірки — алгоритми",
+ "variant": "",
+ "raw": true,
+ "task_file": "task.md",
+ "documents": [],
+ "outputs": ["primes.csv"]
+}

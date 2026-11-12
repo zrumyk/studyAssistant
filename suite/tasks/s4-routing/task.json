@@ -1,0 +1,10 @@
+{
+ "title": "Набір S4 — маршрутизація подій за файлом політики",
+ "subject": "Набір перевірки — мережі",
+ "variant": "",
+ "raw": false,
+ "task_file": "task.md",
+ "documents": [{"file": "files/routing-lab.txt", "role": "task"}],
+ "outputs": ["decisions.csv", "checks.json", "routing-policy.json"],
+ "origin": "Умова й бриф контрольного завдання A03 з аудиту 06.11.2026"
+}

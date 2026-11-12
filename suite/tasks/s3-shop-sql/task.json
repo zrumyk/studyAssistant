@@ -1,0 +1,9 @@
+{
+ "title": "Набір S3 — запити SQLite до бази магазину",
+ "subject": "Набір перевірки — бази даних",
+ "variant": "",
+ "raw": false,
+ "task_file": "task.md",
+ "documents": [{"file": "files/customers.csv", "role": "data"}, {"file": "files/orders.csv", "role": "data"}],
+ "outputs": ["q1_city_revenue.csv", "q2_top_customers.csv", "q3_orders_by_month.csv", "q4_no_orders.csv"]
+}

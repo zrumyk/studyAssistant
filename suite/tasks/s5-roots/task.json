@@ -1,0 +1,9 @@
+{
+ "title": "Набір S5 — корені нелінійного рівняння",
+ "subject": "Набір перевірки — чисельні методи",
+ "variant": "3",
+ "raw": true,
+ "task_file": "task.md",
+ "documents": [{"file": "files/lab2-methodical.docx", "role": "task"}],
+ "outputs": ["roots.json"]
+}
