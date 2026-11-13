@@ -179,6 +179,9 @@ def run_task(client, task_dir, settings, run_id, budget_left, timeout_min, attac
                                                   'subject': meta['subject'], 'project_id': pid})
             r.raise_for_status()
             imports.append(r.json()['job_id'])
+            # The API accepts one job per project at a time; wait before importing the next file.
+            while any(j['id'] == imports[-1] and j['status'] in ('queued', 'running') for j in jobs_of(pid, 'import')):
+                time.sleep(2)
     result['project_id'] = pid
     deadline = time.time() + timeout_min * 60
     while True:

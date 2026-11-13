@@ -59,7 +59,7 @@ def evaluate(files):
     passed = not problems
     if problems_note:
         problems.append('примітка (не провал): ' + problems_note)
-    return passed, problems, [f'{r:.4f}']
+    return passed, problems, [f'{r:.6f}'[:5]]  # '2.094': shared prefix of rounded and longer printed forms
 
 
 def mutate(files, tmp):
