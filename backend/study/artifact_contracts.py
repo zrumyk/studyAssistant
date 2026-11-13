@@ -97,6 +97,15 @@ def drop_undeclared_outputs(spec, action):
     return dropped
 
 
+def note_unpublished(pid, spec, dropped):
+    """Record unpublished undeclared outputs; called wherever check_action actually drops them."""
+    if dropped:
+        from . import db
+        db.event(pid, 'undeclared_outputs_unpublished',
+                 {'step': spec.get('title'), 'paths': dropped,
+                  'note': 'Файли, не оголошені в плані, не публікуються й не передаються наступним крокам'})
+
+
 def check_action(spec, action):
     """Validate an action against its step contract. Returns undeclared code outputs that were unpublished."""
     outputs = spec.get('artifact_outputs', [])

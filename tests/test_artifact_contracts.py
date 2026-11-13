@@ -89,6 +89,22 @@ def test_action_cannot_silently_publish_other_files_or_overwrite_input():
         check_action(spec, bad)
 
 
+def test_prepared_path_records_unpublished_outputs(project):
+    from study import prepared
+    spec = contract_plan().steps[1].model_dump()
+    action = Action(entrypoint='main.js', explanation='fixture', files=[{'path':'main.js','content':'code'}],
+                    expected_files=['summary.csv', 'scratch.db'])
+    workspace = config.project_dir(project['id']) / 'workspace'
+    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        prepared.validate(action, spec, workspace, contract_version=1)
+    except ValueError:
+        pass  # later prepared checks may reject this fixture; the contract step ran first
+    events = db.query("SELECT data FROM events WHERE project_id=? AND kind='undeclared_outputs_unpublished'", (project['id'],))
+    assert events and 'scratch.db' in events[0]['data']
+    assert action.expected_files == ['summary.csv']
+
+
 def test_consumer_requires_matching_completed_producer_receipt(project):
     pid = project['id']
     root = config.project_dir(pid) / 'workspace'

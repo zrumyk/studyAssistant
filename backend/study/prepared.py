@@ -40,8 +40,9 @@ def parse_response(response):
 
 def validate(action, spec, workspace, *, contract_version=0):
     if contract_version == 1:
-        from .artifact_contracts import check_action
-        check_action(spec, action)
+        from .artifact_contracts import check_action, note_unpublished
+        # workspace is always <project_dir>/workspace; the project id is its parent folder name.
+        note_unpublished(Path(workspace).parent.name, spec, check_action(spec, action))
     if spec["kind"] != "code" or action.requires_user:
         raise ValueError(
             "Підготовлений код застосовується тільки до автоматичного кроку code"
