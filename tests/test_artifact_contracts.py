@@ -89,6 +89,27 @@ def test_action_cannot_silently_publish_other_files_or_overwrite_input():
         check_action(spec, bad)
 
 
+def test_prewritten_result_is_removed_so_the_program_must_compute_it(tmp_path):
+    from study.artifact_contracts import drop_prewritten_results
+    action = Action(entrypoint='main.c', explanation='fixture',
+                    files=[{'path': 'main.c', 'content': 'code'}, {'path': 'primes.csv', 'content': 'N,count\n10,4'},
+                           {'path': 'check.py', 'content': 'assert True'}],
+                    checks=[{'path': 'check.py', 'content': 'assert True'}],
+                    expected_files=['primes.csv'])
+    assert drop_prewritten_results(action, tmp_path) == ['primes.csv', 'check.py']
+    assert [f.path for f in action.files] == ['main.c']
+    assert action.expected_files == ['primes.csv']  # still required from the program at runtime
+    assert drop_prewritten_results(action, tmp_path) == []
+
+
+def test_entrypoint_is_never_removed_even_if_listed_as_result(tmp_path):
+    from study.artifact_contracts import drop_prewritten_results
+    action = Action(entrypoint='main.py', explanation='fixture',
+                    files=[{'path': 'main.py', 'content': 'print(4)'}], expected_files=['main.py'])
+    assert drop_prewritten_results(action, tmp_path) == []
+    assert [f.path for f in action.files] == ['main.py']
+
+
 def test_prepared_path_records_unpublished_outputs(project):
     from study import prepared
     spec = contract_plan().steps[1].model_dump()

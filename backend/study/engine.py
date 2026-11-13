@@ -751,6 +751,12 @@ expected_files містить тільки очікувані вихідні р�
     if spec["kind"] == "code":
         action.entrypoint = entry
         action = normalize_checks(action)
+        from .artifact_contracts import drop_prewritten_results
+        removed = drop_prewritten_results(action, root)
+        if removed:
+            db.event(pid, 'prewritten_results_removed', {
+                'step_id': step['id'], 'paths': removed,
+                'note': 'Результати, записані моделлю заздалегідь, видалено; програма має створити їх сама'})
         code_paths={str(config.safe_path(root,file.path)).casefold() for file in action.files+action.checks}
         if any(str(config.safe_path(root,path)).casefold() in code_paths for path in action.expected_files):
             raise ValueError('expected_files містить лише створені програмою результати, не основний код чи перевірний скрипт')
