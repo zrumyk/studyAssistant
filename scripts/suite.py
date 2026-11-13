@@ -31,8 +31,8 @@ def load_oracle(task_dir):
 
 
 def tasks(only=None):
-    found = sorted(p for p in TASKS.iterdir() if (p / 'task.json').exists())
-    return [p for p in found if not only or p.name in only]
+    found = {p.name: p for p in TASKS.iterdir() if (p / 'task.json').exists()}
+    return [found[name] for name in only if name in found] if only else [found[k] for k in sorted(found)]
 
 
 def git_state():
