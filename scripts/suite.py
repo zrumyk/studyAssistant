@@ -116,6 +116,12 @@ def grade(task_dir, pid, settings):
     }
 
 
+def passed_fully(result):
+    """Full pass ends at the report while the defense is switched off (user decision 13.11)."""
+    final = 'defense' if result.get('defense_enabled', True) else 'report'
+    return STAGES.index(result['stage']) >= STAGES.index(final)
+
+
 def stage_of(result):
     stage = result.get('stage', 'created')
     g = result.get('grading') or {}
@@ -228,9 +234,11 @@ def run_task(client, task_dir, settings, run_id, budget_left, timeout_min, attac
             result['executed'] = bool(done) and all(s['status'] == 'done' for s in done)
             if p['status'] == 'completed':
                 defense_jobs = [j for j in p['jobs'] if j['kind'] == 'defense']
-                if not defense_jobs:
+                if not defense_jobs and settings.get('auto_defense', True):
                     continue  # defense is enqueued right after completion
-                if defense_jobs[0]['status'] == 'failed':
+                if not defense_jobs:
+                    result['reason'] = 'completed (захист вимкнено в налаштуваннях)'
+                elif defense_jobs[0]['status'] == 'failed':
                     result['reason'] = 'defense failed: ' + (defense_jobs[0].get('error') or '')[:400]
                 else:
                     result['reason'] = 'completed'
@@ -246,7 +254,8 @@ def run_task(client, task_dir, settings, run_id, budget_left, timeout_min, attac
     except Exception as error:  # an oracle defect must not stop the rest of the paid run
         result['grading'] = {'oracle_error': f'{type(error).__name__}: {error}'}
     result['stage'] = stage_of(result)
-    result['full_pass'] = result['stage'] == 'defense'
+    result['defense_enabled'] = settings.get('auto_defense', True)
+    result['full_pass'] = passed_fully(result)
     return result
 
 
@@ -297,7 +306,7 @@ def cmd_check(args):
         if res.get('project_id'):
             res['grading'] = grade(TASKS / res['task'], res['project_id'], settings)
             res['stage'] = stage_of(res)
-            res['full_pass'] = res['stage'] == 'defense'
+            res['full_pass'] = passed_fully(res)
     record['summary'] = summary(record['results'])
     Path(args.results).write_text(json.dumps(record, ensure_ascii=False, indent=1), 'utf-8')
     print(json.dumps(record['summary'], ensure_ascii=False))
