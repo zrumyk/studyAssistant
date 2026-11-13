@@ -65,9 +65,20 @@ def test_real_import_path_checked_before_plan_replaces_existing_steps(project, p
 def test_action_cannot_silently_publish_other_files_or_overwrite_input():
     spec = contract_plan().steps[1].model_dump()
     action = Action(entrypoint='main.js', explanation='fixture', files=[{'path':'main.js','content':'code'}], expected_files=['summary.csv'])
-    check_action(spec, action)
+    assert check_action(spec, action) == []
+    # An extra scratch file next to the declared output is unpublished, not fatal.
+    extra = action.model_copy(deep=True)
+    extra.expected_files = ['summary.csv', 'scratch.db']
+    assert check_action(spec, extra) == ['scratch.db']
+    assert extra.expected_files == ['summary.csv']
+    # Replacing the declared output with another file is still rejected.
     bad = action.model_copy(deep=True)
     bad.expected_files = ['other.csv']
+    with pytest.raises(ValueError, match='Data output'):
+        check_action(spec, bad)
+    # Writing into the read-only inputs/ namespace is still rejected.
+    bad = action.model_copy(deep=True)
+    bad.expected_files = ['summary.csv', 'inputs/x.csv']
     with pytest.raises(ValueError, match='artifact_outputs'):
         check_action(spec, bad)
     bad = action.model_copy(deep=True)

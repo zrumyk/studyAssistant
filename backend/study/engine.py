@@ -890,7 +890,11 @@ def execute_project(pid):
                     from .artifact_contracts import check_action
                     action = prepare_action(pid, step, previous)
                     if p['plan'].get('artifact_contract_version', 0) == 1:
-                        check_action(spec, action)
+                        dropped = check_action(spec, action)
+                        if dropped:
+                            db.event(pid, 'undeclared_outputs_unpublished',
+                                     {'step_id': sid, 'paths': dropped,
+                                      'note': 'Файли, не оголошені в плані, не публікуються й не передаються наступним крокам'})
                         if spec['kind'] == 'write':
                             from .artifact_contracts import fresh_outputs
                             fresh_outputs(pid, spec, action)

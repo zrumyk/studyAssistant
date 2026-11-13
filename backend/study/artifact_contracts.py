@@ -75,9 +75,33 @@ def validate_contract(plan, pid=None, *, require=False):
             owners.append((name, index))
 
 
-def check_action(spec, action):
+def drop_undeclared_outputs(spec, action):
+    """Unpublish extra files a code step plans to create beyond its declared outputs.
+
+    Later steps receive only declared outputs, so an extra scratch file (for example a
+    database built to verify a schema) cannot leak into the plan. Rejecting it used to
+    fail the whole step after three repairs (13.11 suite, S3). Paths that touch declared
+    inputs or the read-only inputs/ namespace are still rejected by check_action.
+    Mutates action.expected_files and returns the dropped paths.
+    """
+    if spec['kind'] != 'code':
+        return []
     outputs = spec.get('artifact_outputs', [])
     inputs = spec.get('artifact_inputs', [])
+    dropped = [path for path in action.expected_files
+               if not any(covers(name, path) for name in outputs)
+               and path.split('/')[0].casefold() != 'inputs'
+               and not any(overlaps(path, name) for name in inputs)]
+    if dropped:
+        action.expected_files = [path for path in action.expected_files if path not in dropped]
+    return dropped
+
+
+def check_action(spec, action):
+    """Validate an action against its step contract. Returns undeclared code outputs that were unpublished."""
+    outputs = spec.get('artifact_outputs', [])
+    inputs = spec.get('artifact_inputs', [])
+    dropped = drop_undeclared_outputs(spec, action)
     if spec['kind'] == 'fetch' and action.expected_files != outputs:
         raise ValueError('fetch expected_files має точно збігатися з єдиним artifact_output')
     for file in action.files + action.checks:
@@ -95,6 +119,7 @@ def check_action(spec, action):
         for path in outputs:
             if path not in sources and not any(covers(path, name) or covers(name, path) for name in action.expected_files):
                 raise ValueError('Data output має бути у expected_files, source deliverable — у files: ' + path)
+    return dropped
 
 
 def capture_outputs(workspace, spec, produced, *, snapshot=None):
