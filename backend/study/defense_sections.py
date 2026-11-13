@@ -1,10 +1,25 @@
-"""Bounded, durable recovery of one study-guide section after truncation."""
+"""Bounded, durable recovery of one study-guide section after truncation.
+
+The model reviewer is advisory for the study guide: a malformed review or remarks
+that survive one repair do not stop the whole defense. Such a section is kept with
+a visible note listing what was not verified, so the student sees the doubt.
+"""
 import hashlib
 import json
+from pydantic import ValidationError
 from . import db, config
 from .providers import ModelOutputTruncated
 from .schemas import ContentReview
 from .reports import review_section_structure
+
+MAX_REPAIRS = 1
+
+
+def unverified_note(reason, remarks=()):
+    lines = ['> **Розділ не пройшов автоматичну перевірку.** ' + reason]
+    lines += ['> - ' + str(item).replace('\n', ' ') for item in remarks]
+    lines.append('> Перевірте цей розділ самостійно перед захистом.')
+    return '\n'.join(lines) + '\n\n'
 
 
 def digest(value):
@@ -39,6 +54,8 @@ def reviewed_section(pid, heading, prompt, headings, state, save, model, reviewe
             return False
         if item.get('text_sha256') != digest(item['text']):
             return False
+        if item.get('unverified'):
+            return True
         try:
             review = ContentReview.model_validate(item['review'])
         except (ValueError, KeyError, TypeError):
@@ -59,6 +76,27 @@ def reviewed_section(pid, heading, prompt, headings, state, save, model, reviewe
         'blocking_issues лише для суттєвих помилок; стиль у notes.\n'
     )
 
+    def review_of(text_prompt):
+        """One review; a malformed response gets one differently worded retry, then None."""
+        try:
+            return request(reviewer, text_prompt, ContentReview)
+        except ValidationError:
+            db.event(pid, 'defense_review_invalid', {'heading': heading})
+        try:
+            return request(reviewer, text_prompt + '\nПопередня відповідь перевірки не була коректним JSON. '
+                           'Поверни лише один JSON-об’єкт за схемою, без тексту поза ним.', ContentReview)
+        except ValidationError:
+            return None
+
+    def keep_unverified(item, text, reason, remarks=()):
+        text = unverified_note(reason, remarks) + text
+        item.update(text=text, unverified=reason, remarks=list(remarks))
+        item.pop('draft', None)
+        item['text_sha256'] = digest(text)
+        save()
+        db.event(pid, 'defense_section_unverified', {'heading': heading, 'reason': reason})
+        return text
+
     def produce(part_id, instruction):
         item = record['parts'].setdefault(part_id, {'repairs': 0})
         if accepted(item):
@@ -68,7 +106,9 @@ def reviewed_section(pid, heading, prompt, headings, state, save, model, reviewe
             item['generation_request_id'] = getattr(model, 'last_request_id', None)
             save()
         while True:
-            review = request(reviewer, review_rule + instruction + '\nТекст для перевірки:\n' + item['draft'], ContentReview)
+            review = review_of(review_rule + instruction + '\nТекст для перевірки:\n' + item['draft'])
+            if review is None:
+                return keep_unverified(item, item['draft'], 'Відповідь рецензента двічі була некоректною.')
             review = review_section_structure(review, heading, item['draft'], headings)
             if review.satisfied:
                 item.update(text=item.pop('draft'), review=review.model_dump(),
@@ -79,8 +119,9 @@ def reviewed_section(pid, heading, prompt, headings, state, save, model, reviewe
                 return item['text']
             item['last_review'] = review.model_dump()
             save()
-            if item['repairs'] >= 3:
-                raise RuntimeError('Підготовка до захисту потребує уточнення: ' + heading + ': ' + '; '.join(review.blocking_issues))
+            if item['repairs'] >= MAX_REPAIRS:
+                return keep_unverified(item, item['draft'], 'Після виправлення рецензент залишив зауваження:',
+                                       review.blocking_issues)
             instruction_repair = instruction + '\nВиправ ці помилки: ' + json.dumps(review.model_dump(), ensure_ascii=False) + '\nПопередній текст:\n' + item['draft']
             item['draft'] = request(model, instruction_repair)
             item['generation_request_id'] = getattr(model, 'last_request_id', None)
@@ -115,14 +156,21 @@ def reviewed_section(pid, heading, prompt, headings, state, save, model, reviewe
         text = first + '\n\n' + second
         # Part acceptance does not establish completeness or consistency of the
         # assembled section. Never render it until this whole-section review passes.
-        review = request(reviewer, review_rule + prompt + '\nПеревір також цілісність двох частин і відсутність суперечностей та дублювання.\nТекст для перевірки:\n' + text, ContentReview)
+        review = review_of(review_rule + prompt + '\nПеревір також цілісність двох частин і відсутність суперечностей та дублювання.\nТекст для перевірки:\n' + text)
     except ModelOutputTruncated:
         record['terminal_truncation'] = True
         save()
         raise RuntimeError('Повторне обрізання частини підготовки; автоматичні повтори зупинено: ' + heading)
-    review = review_section_structure(review, heading, text, headings)
-    if not review.satisfied:
-        raise RuntimeError('Об’єднаний розділ підготовки потребує перегляду: ' + heading + ': ' + '; '.join(review.blocking_issues))
+    if review is not None:
+        review = review_section_structure(review, heading, text, headings)
+    if review is None or not review.satisfied:
+        merged = {'repairs': 0}
+        reason = ('Відповідь рецензента двічі була некоректною.' if review is None
+                  else 'Об’єднаний розділ має зауваження рецензента:')
+        text = keep_unverified(merged, text, reason, [] if review is None else review.blocking_issues)
+        state['sections'][heading] = merged | {'context_sha256': key, 'model': getattr(model, 'last_source', 'local'), 'split': True}
+        save()
+        return text
     state['sections'][heading] = {'text': text, 'text_sha256': digest(text), 'context_sha256': key,
                                   'review': review.model_dump(), 'review_request_id': getattr(reviewer, 'last_request_id', None),
                                   'model': getattr(model, 'last_source', 'local'), 'split': True}

@@ -81,11 +81,50 @@ def test_uncertain_transport_error_never_triggers_split(project):
     assert not state['section_progress']['Results']['split'] and len(model.calls)==1
 
 
-def test_rejected_merged_section_is_not_renderable(project):
+def test_rejected_merged_section_is_kept_with_visible_warning(project):
     state={'sections':{}}
-    with pytest.raises(RuntimeError,match='Об’єднаний'):
-        run(project,state,Model([ModelOutputTruncated('cap'),'Half one','Contradictory half two']),
-            Model([accepted(),accepted(),ContentReview(blocking_issues=['Contradiction'],explanation='Wrong')]))
+    text=run(project,state,Model([ModelOutputTruncated('cap'),'Half one','Contradictory half two']),
+             Model([accepted(),accepted(),ContentReview(blocking_issues=['Contradiction'],explanation='Wrong')]))
+    assert text.startswith('> **Розділ не пройшов автоматичну перевірку.**') and 'Contradiction' in text
+    assert 'Half one' in text and state['sections']['Results']['unverified']
+    assert run(project,state,Model([]),Model([]))==text
+
+
+def invalid_review():
+    try:
+        ContentReview.model_validate_json('{"blocking_issues": ["broken')
+    except ValueError as error:
+        return error
+
+
+def test_malformed_review_is_retried_once_with_different_prompt(project):
+    state={'sections':{}}
+    reviewer=Model([invalid_review(),accepted()])
+    assert run(project,state,Model(['Draft']),reviewer)=='Draft'
+    assert len(reviewer.calls)==2 and reviewer.calls[0]!=reviewer.calls[1]
+    assert 'unverified' not in state['sections']['Results']
+
+
+def test_twice_malformed_review_keeps_section_as_unverified(project):
+    state={'sections':{}}
+    text=run(project,state,Model(['Draft']),Model([invalid_review(),invalid_review()]))
+    assert text.endswith('Draft') and 'некоректною' in text
+    assert state['sections']['Results']['unverified']
+    assert run(project,state,Model([]),Model([]))==text
+
+
+def test_remarks_after_one_repair_are_shown_instead_of_failing(project):
+    state={'sections':{}}
+    blocked=ContentReview(blocking_issues=['Wrong formula'],explanation='Math error')
+    model=Model(['Draft','Repaired'])
+    text=run(project,state,model,Model([blocked,blocked]))
+    assert len(model.calls)==2 and text.endswith('Repaired') and 'Wrong formula' in text
+
+
+def test_budget_refusal_is_not_treated_as_malformed_review(project):
+    state={'sections':{}}
+    with pytest.raises(ValueError,match='ліміт'):
+        run(project,state,Model(['Draft']),Model([ValueError('Запит поза межами ліміту')]))
     assert 'Results' not in state['sections']
 
 

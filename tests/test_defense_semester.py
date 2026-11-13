@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-import pytest
 from study import config, db, engine, defense, semester
 from study.schemas import ContentReview
 
@@ -54,17 +53,23 @@ def test_defense_generated_reviewed_cached_and_downloadable(client, project, pla
     assert response.status_code == 200 and 'Пояснення' in response.text
 
 
-def test_defense_blocks_incorrect_explanation_before_render(project, plan, monkeypatch):
+def test_defense_flags_disputed_explanation_instead_of_failing(project, plan, monkeypatch):
+    # Since 13.11 the reviewer is advisory for the study guide: one failed section must
+    # not stop the whole defense, but its remarks must be visible next to the text.
     pid = finish(project, plan)
     monkeypatch.setattr(defense, 'context', lambda *a, **k: '')
     monkeypatch.setattr(defense, 'report_evidence', lambda p: 'mean=4')
     def generate(self, prompt, schema=None, **kwargs):
         return ContentReview(blocking_issues=['Wrong mean'], explanation='Wrong') if schema else 'mean=99'
     monkeypatch.setattr(defense.BudgetedModel, 'generate', generate)
-    monkeypatch.setattr(defense.DocxRenderer, 'render', lambda *a, **k: pytest.fail('Rejected text rendered'))
-    with pytest.raises(RuntimeError, match='Wrong mean'):
-        defense.build(pid)
-    assert not db.query("SELECT id FROM artifacts WHERE name LIKE 'defense.%'")
+    rendered = []
+    monkeypatch.setattr(defense.DocxRenderer, 'render',
+                        lambda self, pid, report, **k: rendered.append(report) or {'files': [str(config.project_dir(pid) / 'reports' / 'x' / 'defense.docx')]})
+    (config.project_dir(pid) / 'reports' / 'x').mkdir(parents=True)
+    defense.build(pid)
+    sections = rendered[0].sections
+    assert all(s.text.startswith('> **Розділ не пройшов автоматичну перевірку.**') for s in sections)
+    assert all('Wrong mean' in s.text for s in sections)
 
 
 def test_defense_snapshots_executed_code_and_invalidates_on_new_theory(project, plan):

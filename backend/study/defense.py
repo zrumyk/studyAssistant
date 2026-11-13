@@ -11,6 +11,9 @@ from .schemas import ContentReview, Report, ReportSection
 from .reports import DocxRenderer, report_evidence, review_section_structure
 from .search import context
 
+# Each code chunk becomes one author+reviewer section pair; 70-line chunks made code
+# explanations most of the defense cost (13.11 suite baseline: 14 of 26 sections for C).
+CODE_CHUNK_LINES = 200
 CODE_SUFFIXES = {'.py', '.js', '.ts', '.c', '.cpp', '.h', '.java', '.cs', '.r', '.m', '.sql', '.ino'}
 TOPICS = [
     ('Як користуватися підготовкою', 'Поясни мету саме цієї роботи, потрібні результати та зв’язок теми з практикою. Відділи виконане від того, чого робота не доводить.'),
@@ -126,9 +129,9 @@ def build(pid):
             tasks.insert(5, (f'Етап {index} {step["spec"]["title"]}', 'Поясни покроково навіщо цей етап, що на вході, як він працює, команди/дії, що отримано та як це перевірено. Відділи факт від рекомендації.', json.dumps(step, ensure_ascii=False)))
     for source in sources:
         lines = source['text'].splitlines()
-        for offset in range(0, len(lines), 70):
-            excerpt = '\n'.join(f'{offset+i+1}: {line}' for i, line in enumerate(lines[offset:offset+70]))
-            tasks.insert(-5, (f'Розбір коду {source["path"]} рядки {offset+1}–{min(offset+70,len(lines))} запуск {source["run_id"][:8]}', 'Поясни кожен логічний блок і важливі рядки наведеного коду з їхніми номерами: імпорти, типи, функції, аргументи, потік даних, алгоритм, побічні ефекти, обробку помилок. Для checker поясни, які assert реально досягаються. Не приписуй цьому фрагменту код поза ним.', excerpt))
+        for offset in range(0, len(lines), CODE_CHUNK_LINES):
+            excerpt = '\n'.join(f'{offset+i+1}: {line}' for i, line in enumerate(lines[offset:offset+CODE_CHUNK_LINES]))
+            tasks.insert(-5, (f'Розбір коду {source["path"]} рядки {offset+1}–{min(offset+CODE_CHUNK_LINES,len(lines))} запуск {source["run_id"][:8]}', 'Поясни кожен логічний блок і важливі рядки наведеного коду з їхніми номерами: імпорти, типи, функції, аргументи, потік даних, алгоритм, побічні ефекти, обробку помилок. Для checker поясни, які assert реально досягаються. Не приписуй цьому фрагменту код поза ним.', excerpt))
     headings = [t[0] for t in tasks]
     cancelled = lambda: db.one('SELECT status FROM projects WHERE id=?', (pid,))['status'] != 'completed'
     model = BudgetedModel(pid, OllamaProvider(), 'Підготовка до захисту', prefer_cloud=True, cancelled=cancelled)
