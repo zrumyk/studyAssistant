@@ -51,6 +51,15 @@ def spend(pid):
     return float(row[0]), int(row[1])
 
 
+def jobs_of(pid, kind=None):
+    """All non-cloud jobs of a project from the DB; the API returns only the 10 newest, crowded out by model calls."""
+    with sqlite3.connect(f'file:{DB}?mode=ro', uri=True) as c:
+        c.row_factory = sqlite3.Row
+        rows = c.execute("SELECT id,kind,status,error,created FROM jobs WHERE project_id=? AND kind!='cloud' "
+                         "AND (? IS NULL OR kind=?) ORDER BY created DESC", (pid, kind, kind)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def find_outputs(pid, names):
     """Newest file with each expected name produced by the project, never from imported inputs/."""
     base = ROOT / 'data' / 'projects' / pid
@@ -177,8 +186,10 @@ def run_task(client, task_dir, settings, run_id, budget_left, timeout_min, attac
         p = get_json(client, f'/api/projects/{pid}')
         cost, calls = spend(pid)
         result.update(cost_usd=round(cost, 6), model_calls=calls, status=p['status'])
-        jobs = {j['id']: j for j in p['jobs']}
-        active = any(j['status'] in ('queued', 'running') for j in p['jobs'])
+        all_jobs = jobs_of(pid)
+        p['jobs'] = all_jobs
+        jobs = {j['id']: j for j in all_jobs}
+        active = any(j['status'] in ('queued', 'running') for j in all_jobs)
         if cost > budget_left:
             client.post(f'/api/projects/{pid}/pause')
             result['reason'] = f'budget: suite limit reached at ${cost:.4f}'
