@@ -369,6 +369,20 @@ def test_simple_program_cannot_offer_its_source_as_a_new_runtime_result(project,
         engine.prepare_action(project['id'],db.project(project['id'])['steps'][0],'')
 
 
+def test_prewritten_result_file_is_removed_before_running(project,plan,monkeypatch):
+    from study import assistance
+    from study.schemas import PythonProgram
+    engine.save_plan(project['id'],plan)
+    monkeypatch.setattr(engine,'context',lambda *a,**k:'')
+    program=PythonProgram(main_code='print(4)',checker_code='value=2\nassert value+value==4',expected_files=['result.csv'],explanation='prewritten',
+                          supporting_files=[{'path':'result.csv','content':'made,up\n1,2'}])
+    monkeypatch.setattr(assistance.BudgetedModel,'generate',lambda *a,**k:program)
+    action=engine.prepare_action(project['id'],db.project(project['id'])['steps'][0],'')
+    assert action.expected_files==['result.csv']
+    assert 'result.csv' not in [f.path for f in action.files]
+    assert db.query("SELECT id FROM events WHERE project_id=? AND kind='prewritten_results_removed'",(project['id'],))
+
+
 @pytest.mark.parametrize('previous,expected',[
     ('',None),('Static syntax error',None),
     ('{"run_id":"failed-runtime","log":"AssertionError"}',True),

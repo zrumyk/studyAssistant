@@ -97,6 +97,28 @@ def drop_undeclared_outputs(spec, action):
     return dropped
 
 
+def drop_prewritten_results(action, root):
+    """Remove result files the model wrote itself instead of letting the program compute them.
+
+    A path listed both in action.files and in expected_files is a runtime result whose
+    content was supplied in advance. Publishing it would let made-up results pass, and
+    rejecting the action failed whole steps after three repairs (13.11 suite: S2, S5).
+    The file is dropped from action.files, so the program must create it at runtime or
+    the step fails honestly. A checker copy duplicated in files is dropped too. The
+    entrypoint itself is never removed. Returns the removed paths.
+    """
+    def key(path):
+        return str(config.safe_path(root, path)).casefold()
+    expected = {key(p) for p in action.expected_files}
+    checks = {key(f.path) for f in action.checks}
+    entry = key(action.entrypoint) if action.entrypoint else None
+    removed = [f.path for f in action.files
+               if key(f.path) != entry and (key(f.path) in expected or key(f.path) in checks)]
+    if removed:
+        action.files = [f for f in action.files if f.path not in removed]
+    return removed
+
+
 def note_unpublished(pid, spec, dropped):
     """Record unpublished undeclared outputs; called wherever check_action actually drops them."""
     if dropped:
