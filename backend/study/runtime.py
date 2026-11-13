@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Protocol
 import hashlib
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -203,10 +202,7 @@ class DockerRuntime:
         )
         if check.returncode == 0:
             return image
-        if os.name == "nt" and shutil.disk_usage("C:/").free < 10 * 1024**3:
-            raise RuntimeError(
-                "На C: потрібно звільнити щонайменше 10 ГБ і перенести сховище Docker на D: перед завантаженням середовищ. Код збережено."
-            )
+        # The free-space reserve for builds is enforced by disk_guard on the data drive.
         folder = config.DATA / "runtime-builds" / image.split(":")[1]
         folder.mkdir(parents=True, exist_ok=True)
         lines = ["FROM " + base, "WORKDIR /opt/deps"]
