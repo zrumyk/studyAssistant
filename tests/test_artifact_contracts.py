@@ -65,9 +65,20 @@ def test_real_import_path_checked_before_plan_replaces_existing_steps(project, p
 def test_action_cannot_silently_publish_other_files_or_overwrite_input():
     spec = contract_plan().steps[1].model_dump()
     action = Action(entrypoint='main.js', explanation='fixture', files=[{'path':'main.js','content':'code'}], expected_files=['summary.csv'])
-    check_action(spec, action)
+    assert check_action(spec, action) == []
+    # An extra scratch file next to the declared output is unpublished, not fatal.
+    extra = action.model_copy(deep=True)
+    extra.expected_files = ['summary.csv', 'scratch.db']
+    assert check_action(spec, extra) == ['scratch.db']
+    assert extra.expected_files == ['summary.csv']
+    # Replacing the declared output with another file is still rejected.
     bad = action.model_copy(deep=True)
     bad.expected_files = ['other.csv']
+    with pytest.raises(ValueError, match='Data output'):
+        check_action(spec, bad)
+    # Writing into the read-only inputs/ namespace is still rejected.
+    bad = action.model_copy(deep=True)
+    bad.expected_files = ['summary.csv', 'inputs/x.csv']
     with pytest.raises(ValueError, match='artifact_outputs'):
         check_action(spec, bad)
     bad = action.model_copy(deep=True)
@@ -76,6 +87,22 @@ def test_action_cannot_silently_publish_other_files_or_overwrite_input():
     bad.files[-1] = FileWrite.model_validate(bad.files[-1])
     with pytest.raises(ValueError, match='перезаписати'):
         check_action(spec, bad)
+
+
+def test_prepared_path_records_unpublished_outputs(project):
+    from study import prepared
+    spec = contract_plan().steps[1].model_dump()
+    action = Action(entrypoint='main.js', explanation='fixture', files=[{'path':'main.js','content':'code'}],
+                    expected_files=['summary.csv', 'scratch.db'])
+    workspace = config.project_dir(project['id']) / 'workspace'
+    workspace.mkdir(parents=True, exist_ok=True)
+    try:
+        prepared.validate(action, spec, workspace, contract_version=1)
+    except ValueError:
+        pass  # later prepared checks may reject this fixture; the contract step ran first
+    events = db.query("SELECT data FROM events WHERE project_id=? AND kind='undeclared_outputs_unpublished'", (project['id'],))
+    assert events and 'scratch.db' in events[0]['data']
+    assert action.expected_files == ['summary.csv']
 
 
 def test_consumer_requires_matching_completed_producer_receipt(project):

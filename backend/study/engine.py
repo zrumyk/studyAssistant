@@ -890,7 +890,8 @@ def execute_project(pid):
                     from .artifact_contracts import check_action
                     action = prepare_action(pid, step, previous)
                     if p['plan'].get('artifact_contract_version', 0) == 1:
-                        check_action(spec, action)
+                        from .artifact_contracts import note_unpublished
+                        note_unpublished(pid, spec, check_action(spec, action))
                         if spec['kind'] == 'write':
                             from .artifact_contracts import fresh_outputs
                             fresh_outputs(pid, spec, action)
