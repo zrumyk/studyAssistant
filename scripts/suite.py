@@ -238,7 +238,10 @@ def run_task(client, task_dir, settings, run_id, budget_left, timeout_min, attac
             result['reason'] = 'planning: ' + stop_reason(p)
             break
     result['finished'] = datetime.datetime.now().isoformat(timespec='seconds')
-    result['grading'] = grade(task_dir, pid, settings)
+    try:
+        result['grading'] = grade(task_dir, pid, settings)
+    except Exception as error:  # an oracle defect must not stop the rest of the paid run
+        result['grading'] = {'oracle_error': f'{type(error).__name__}: {error}'}
     result['stage'] = stage_of(result)
     result['full_pass'] = result['stage'] == 'defense'
     return result

@@ -28,9 +28,13 @@ def evaluate(files):
         data = json.loads(path.read_text('utf-8-sig'))
     except ValueError:
         return False, ['roots.json не є JSON'], []
-    if isinstance(data, dict):
-        data = data.get('results') or data.get('roots') or list(data.values())
     problems = []
+    if isinstance(data, dict):
+        # Methodical asks for an array; an object keyed by method is accepted but recorded.
+        data = data.get('results') or data.get('roots') or list(data.values())
+        problems_note = 'формат: об’єкт замість масиву, як вимагала методичка'
+    else:
+        problems_note = None
     by = {}
     for item in data if isinstance(data, list) else []:
         if isinstance(item, dict) and item.get('method') in ('bisection', 'newton'):
@@ -52,14 +56,17 @@ def evaluate(files):
             problems.append(f'bisection: {it} ітерацій, очікується близько {bound}')
         if method == 'newton' and not 1 <= it <= 15:
             problems.append(f'newton: {it} ітерацій')
-    return not problems, problems, [f'{r:.4f}']
+    passed = not problems
+    if problems_note:
+        problems.append('примітка (не провал): ' + problems_note)
+    return passed, problems, [f'{r:.4f}']
 
 
 def mutate(files, tmp):
     data = json.loads(files['roots.json'].read_text('utf-8-sig'))
-    items = data if isinstance(data, list) else data.get('results') or data.get('roots')
+    items = data if isinstance(data, list) else data.get('results') or data.get('roots') or list(data.values())
     for item in items:
-        if item.get('method') == 'newton':
+        if isinstance(item, dict) and item.get('method') == 'newton':
             item['root'] = float(item['root']) + 0.01
     dst = tmp / 'roots.json'
     dst.write_text(json.dumps(data), 'utf-8')
