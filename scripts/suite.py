@@ -104,6 +104,8 @@ def grade(task_dir, pid, settings):
             'key_numbers': [k for k in keys if k in text or k.replace('.', ',') in text],
             'missing_numbers': [k for k in keys if k not in text and k.replace('.', ',') not in text],
             'pdf': bool(report_pdf and report_pdf.stat().st_size > 1000),
+            # The renderer builds the title page; a model-written one duplicates and invents details.
+            'no_title_section': 'титульна сторінка' not in text.casefold() and 'титульний аркуш' not in text.casefold(),
         }
     return {
         'outputs': {k: str(v.relative_to(ROOT)) for k, v in files.items()},

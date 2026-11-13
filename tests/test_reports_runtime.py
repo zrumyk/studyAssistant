@@ -7,6 +7,24 @@ from study.reports import DocxRenderer
 from study.documents import UniversalParser
 
 
+def test_title_page_sections_are_left_to_the_renderer():
+    from study.reports import report_headings
+    planned = ["Титульна сторінка", "Мета роботи", "Title page", "Висновки", "Титульний аркуш"]
+    assert report_headings(planned) == ["Мета роботи", "Висновки"]
+
+
+def test_renderer_title_carries_the_current_year(project, plan, monkeypatch):
+    from datetime import date
+    from docx import Document
+    from study import reports
+    monkeypatch.setattr(reports, "binary", lambda name: None)
+    pid = project["id"]
+    engine.save_plan(pid, plan)
+    out = DocxRenderer().render(pid, Report(title="Звіт", sections=[]))
+    text = [p.text for p in Document(out["files"][0]).paragraphs]
+    assert str(date.today().year) in text
+
+
 def test_docx_renderer_contains_actual_evidence(client, project, plan, monkeypatch):
     from docx import Document
     from study import reports
