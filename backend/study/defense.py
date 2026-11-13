@@ -75,6 +75,8 @@ def snapshot(p):
         for path in sorted(folder.rglob('*')):
             if (not path.is_file() or path.is_symlink()
                     or not path.resolve().is_relative_to(folder.resolve())
+                    # Platform service files (checker runner, captured streams) are not student code.
+                    or any(part.startswith('.study_') for part in path.relative_to(folder).parts)
                     or path.suffix.lower() not in CODE_SUFFIXES
                     or (step['spec']['language'] == 'python' and path.relative_to(folder).as_posix() not in selected)
                     or path.stat().st_size > 150_000):

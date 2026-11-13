@@ -72,6 +72,18 @@ def test_defense_flags_disputed_explanation_instead_of_failing(project, plan, mo
     assert all('Wrong mean' in s.text for s in sections)
 
 
+def test_defense_skips_platform_service_files(project, plan):
+    pid = finish(project, plan)
+    sid = db.project(pid)['steps'][0]['id']
+    run = config.project_dir(pid) / 'runs' / 'svc'
+    run.mkdir(parents=True)
+    (run / 'main.py').write_text('print(4)', 'utf-8')
+    (run / '.study_checker_runner.py').write_text('import sys', 'utf-8')
+    db.execute('UPDATE steps SET result=? WHERE id=?', (json.dumps({'run_id': 'svc', 'checks': ['.study_checker_runner.py']}), sid))
+    _, sources = defense.snapshot(db.project(pid))
+    assert [s['path'] for s in sources] == ['main.py']
+
+
 def test_defense_snapshots_executed_code_and_invalidates_on_new_theory(project, plan):
     pid = finish(project, plan)
     sid = db.project(pid)['steps'][0]['id']
